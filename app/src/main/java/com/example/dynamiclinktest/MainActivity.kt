@@ -7,104 +7,143 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.common.api.ApiException
 import com.google.firebase.dynamiclinks.FirebaseDynamicLinks
-import androidx.annotation.NonNull
-import androidx.fragment.app.FragmentActivity
-import com.google.android.gms.appinvite.AppInviteReferral
-import com.google.android.gms.tasks.OnFailureListener
-import com.google.firebase.dynamiclinks.PendingDynamicLinkData
-import com.google.android.gms.tasks.OnSuccessListener
-import com.google.firebase.appinvite.FirebaseAppInvite
 import com.google.firebase.dynamiclinks.DynamicLink
-import com.google.firebase.dynamiclinks.ShortDynamicLink
-import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.auth.FirebaseAuth
-
+import com.google.firebase.database.FirebaseDatabase
 
 class MainActivity : AppCompatActivity() {
     private lateinit var linker: TextView
+    private var mInvitationUrl: Uri? = null
+    private lateinit var auth: FirebaseAuth
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        createDynamicLinkReward()
-    }
-
-    fun createDynamicLink_Basic() {
-        // [START create_link_basic]
-        val dynamicLink = FirebaseDynamicLinks.getInstance().createDynamicLink()
-            .setLink(Uri.parse("https://www.example.com/"))
-            .setDomainUriPrefix("https://example.page.link")
-            // Open links with this app on Android
-            .setAndroidParameters(DynamicLink.AndroidParameters.Builder().build())
-            // Open links with com.example.ios on iOS
-            .setIosParameters(DynamicLink.IosParameters.Builder("com.example.ios").build())
-            .buildDynamicLink()
-
-        val dynamicLinkUri = dynamicLink.uri
-
-        linker = findViewById(R.id.linker)
-        linker.text = dynamicLinkUri.toString()
-        linker.setOnClickListener {
-            shareLink(dynamicLinkUri)
-        }
-        // [END create_link_basic]
-    }
-
-    fun createDynamicLinkReward() {
-
+    fun createLink() {
         val user = FirebaseAuth.getInstance().currentUser
         val uid = user!!.uid
-        val link = "https://metester.page.link/?invitedby=$uid"
-        FirebaseDynamicLinks.getInstance().createDynamicLink()
+        val link = "https://mygame.example.com/?invitedby=$uid"
+        val dynamicLink = FirebaseDynamicLinks.getInstance().createDynamicLink()
             .setLink(Uri.parse(link))
             .setDomainUriPrefix("https://example.page.link")
             .setAndroidParameters(
                 DynamicLink.AndroidParameters.Builder("com.example.android")
-                    .setMinimumVersion(125)
+                    .setMinimumVersion(1)
                     .build())
             .setIosParameters(
                 DynamicLink.IosParameters.Builder("com.example.ios")
                     .setAppStoreId("123456789")
                     .setMinimumVersion("1.0.1")
                     .build())
-            .buildShortDynamicLink()
-            .addOnSuccessListener { shortDynamicLink ->
-                val mInvitationUrl = shortDynamicLink.shortLink.toString()
-                linker = findViewById(R.id.linker)
-                linker.text = mInvitationUrl.toString()
+            .buildDynamicLink()
 
+        mInvitationUrl = dynamicLink.uri
+        linker = findViewById(R.id.linker)
+        linker.text = mInvitationUrl.toString()
+        Log.d("authent_sign_create", mInvitationUrl.toString())
+        linker.setOnClickListener {
+            sendInvitation()
+        }
+    }
 
-                val referrerName = FirebaseAuth.getInstance().currentUser?.displayName
-                val subject = String.format("%s wants you to play MyExampleGame!", referrerName)
-                val invitationLink = mInvitationUrl.toString()
-                val msg = "Let's play MyExampleGame together! Use my referrer link: $invitationLink"
-                val msgHtml = String.format("<p>Let's play MyExampleGame together! Use my " +
-                        "<a href=\"%s\">referrer link</a>!</p>", invitationLink)
+    fun sendInvitation() {
+        val referrerName = FirebaseAuth.getInstance().currentUser?.email
+        val subject = String.format("%s wants you to play MyExampleGame!", referrerName)
+        val invitationLink = mInvitationUrl.toString()
+        val msg = "Let's play MyExampleGame together! Use my referrer link: $invitationLink"
+        val msgHtml = String.format("<p>Let's play MyExampleGame together! Use my " +
+                "<a href=\"%s\">referrer link</a>!</p>",  mInvitationUrl.toString())
 
-                val intent = Intent(Intent.ACTION_SENDTO)
-                intent.data = Uri.parse("mailto:") // only email apps should handle this
-                intent.putExtra(Intent.EXTRA_SUBJECT, subject)
-                intent.putExtra(Intent.EXTRA_TEXT, msg)
-                intent.putExtra(Intent.EXTRA_HTML_TEXT, msgHtml)
-                if (intent.resolveActivity(packageManager) != null) {
-                    startActivity(intent)
-                }
-//                linker.setOnClickListener {
-//                    shareLink(shortDynamicLink.shortLink)
-//                }
+        val intent = Intent(Intent.ACTION_SENDTO)
+        intent.data = Uri.parse("mailto:") // only email apps should handle this
+        intent.putExtra(Intent.EXTRA_SUBJECT, subject)
+        intent.putExtra(Intent.EXTRA_TEXT, msg)
+        intent.putExtra(Intent.EXTRA_HTML_TEXT, msgHtml)
+        if (intent.resolveActivity(packageManager) != null) {
+            startActivity(intent)
+        }
+
+    }
+
+    public override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        Log.d("GoogleActivity_user", "jjjj")
+
+        if (requestCode == 9001) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+            } catch (e: ApiException) {
             }
-
+        }
     }
 
-    fun shareLink(myDynamicLink: Uri) {
-        // [START ddl_share_link]
-        val sendIntent = Intent()
-        val msg = "Click a link: $myDynamicLink"
-        sendIntent.action = Intent.ACTION_SEND
-        sendIntent.putExtra(Intent.EXTRA_TEXT, msg)
-        sendIntent.type = "text/plain"
-        startActivity(sendIntent)
-        // [END ddl_share_link]
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        auth = FirebaseAuth.getInstance()
+        signIn("lollola2019@gmail.com", "Iloveadilbek1")
+        createLink()
+
+        FirebaseDynamicLinks.getInstance()
+            .getDynamicLink(intent)
+            .addOnSuccessListener(this) { pendingDynamicLinkData ->
+                var deepLink: Uri? = null
+                if (pendingDynamicLinkData != null) {
+                    deepLink = pendingDynamicLinkData.link
+                }
+
+                val user = FirebaseAuth.getInstance().currentUser
+                if (user == null &&
+                    deepLink != null &&
+                    deepLink.getBooleanQueryParameter("invitedby", false)) {
+                    val referrerUid = deepLink.getQueryParameter("invitedby")
+                    createAnonymousAccountWithReferrerInfo(referrerUid)
+                }
+            }
     }
+
+    private fun createAnonymousAccountWithReferrerInfo(referrerUid: String?) {
+        FirebaseAuth.getInstance()
+            .signInAnonymously()
+            .addOnSuccessListener {
+                val user = FirebaseAuth.getInstance().currentUser
+                val userRecord = FirebaseDatabase.getInstance().reference
+                    .child("users")
+                    .child(user!!.uid)
+                userRecord.child("referred_by").setValue(referrerUid)
+            }
+    }
+
+    private fun createAccount(email: String, password: String) {
+        Log.d("mkk", "createAccount:$email")
+
+        auth.createUserWithEmailAndPassword(email, password)
+            .addOnCompleteListener(this) { task ->
+                if (task.isSuccessful) {
+                    val user = auth.currentUser
+                    Log.d("authent_test", user.toString())
+                } else {
+                    Log.w("authent_test_fail", "createUserWithEmail:failure", task.exception)
+                    Toast.makeText(baseContext, "Authentication failed.",
+                        Toast.LENGTH_SHORT).show()
+                }
+            }
+    }
+
+    private fun signIn(email: String, password: String) {
+        auth.signInWithEmailAndPassword(email, password)
+            .addOnCompleteListener(this) { task ->
+                if (task.isSuccessful) {
+                    val user = auth.currentUser
+                    Log.d("authent_sign", user?.email.toString())
+
+                } else {
+                    Log.w("authent_sign_test", "signInWithEmail:failure", task.exception)
+                    Toast.makeText(baseContext, "Authentication failed.",
+                        Toast.LENGTH_SHORT).show()
+                }
+            }
+    }
+
 }
