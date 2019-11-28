@@ -47,12 +47,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun sendInvitation() {
-        val referrerName = FirebaseAuth.getInstance().currentUser?.email
+        val referrerName = auth.currentUser?.email
         val subject = String.format("%s wants you to play MyExampleGame!", referrerName)
-        val invitationLink = mInvitationUrl.toString()
+        val invitationLink = "https://mytester.page.link"
         val msg = "Let's play MyExampleGame together! Use my referrer link: $invitationLink"
         val msgHtml = String.format("<p>Let's play MyExampleGame together! Use my " +
-                "<a href=\"%s\">referrer link</a>!</p>",  mInvitationUrl.toString())
+                "<a href=\"%s\">referrer link</a>!</p>",  "https://mytester.page.link")
 
         val intent = Intent(Intent.ACTION_SENDTO)
         intent.data = Uri.parse("mailto:") // only email apps should handle this
@@ -83,6 +83,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         auth = FirebaseAuth.getInstance()
         signIn("lollola2019@gmail.com", "Iloveadilbek1")
+        //createAccount("lollola2020@gmail.com", "Iloveadilbek1")
         createLink()
 
         FirebaseDynamicLinks.getInstance()
