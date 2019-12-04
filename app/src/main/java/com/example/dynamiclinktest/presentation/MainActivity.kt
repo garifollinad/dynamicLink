@@ -1,4 +1,4 @@
-package com.example.dynamiclinktest
+package com.example.dynamiclinktest.presentation
 
 import android.content.Intent
 import android.net.Uri
@@ -7,40 +7,79 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.TextView
 import android.widget.Toast
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.Observer
+import androidx.lifecycle.Transformations.map
+import com.example.dynamiclinktest.R
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.dynamiclinks.FirebaseDynamicLinks
 import com.google.firebase.dynamiclinks.DynamicLink
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
+import io.reactivex.Flowable
+import io.reactivex.Single
+import io.reactivex.SingleEmitter
+import io.reactivex.SingleOnSubscribe
+import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.disposables.Disposable
+import io.reactivex.internal.operators.single.SingleInternalHelper.toFlowable
+import io.reactivex.schedulers.Schedulers
+import kotlinx.android.synthetic.main.activity_main.view.*
+import org.intellij.lang.annotations.Flow
 
 class MainActivity : AppCompatActivity() {
     private lateinit var linker: TextView
-    private var mInvitationUrl: Uri? = null
     private lateinit var auth: FirebaseAuth
 
-    fun createLink() {
-        val user = FirebaseAuth.getInstance().currentUser
-        val uid = user!!.uid
-        val link = "https://mygame.example.com/?invitedby=$uid"
-        val dynamicLink = FirebaseDynamicLinks.getInstance().createDynamicLink()
-            .setLink(Uri.parse(link))
-            .setDomainUriPrefix("https://example.page.link")
-            .setAndroidParameters(
-                DynamicLink.AndroidParameters.Builder("com.example.android")
-                    .setMinimumVersion(1)
-                    .build())
-            .setIosParameters(
-                DynamicLink.IosParameters.Builder("com.example.ios")
-                    .setAppStoreId("123456789")
-                    .setMinimumVersion("1.0.1")
-                    .build())
-            .buildDynamicLink()
+    private val disposable = CompositeDisposable()
+    val liveData by lazy {
+        MutableLiveData<State>()
+    }
 
-        mInvitationUrl = dynamicLink.uri
+    fun createLink(){
+        disposable.add(
+        Single.create(object : SingleOnSubscribe<Link> {
+            override fun subscribe(emitter: SingleEmitter<Link>) {
+                val user = FirebaseAuth.getInstance().currentUser
+                val uid = user!!.uid
+                val link = "https://mytester.page.link/?invitedby=$uid"
+                val dynamicLink = FirebaseDynamicLinks.getInstance().createDynamicLink()
+                    .setLink(Uri.parse(link))
+                    .setDomainUriPrefix("https://mytester.page.link")
+                    .setAndroidParameters(
+                        DynamicLink.AndroidParameters.Builder("com.example.dynamiclinktest")
+                            .setMinimumVersion(1)
+                            .build()
+                    )
+                    .setIosParameters(
+                        DynamicLink.IosParameters.Builder("com.example.ios")
+                            .setAppStoreId("123456789")
+                            .setMinimumVersion("1.0.1")
+                            .build()
+                    )
+                    .buildShortDynamicLink()
+                    .addOnSuccessListener { shortDynamicLink ->
+                        emitter.onSuccess(Link(shortDynamicLink.shortLink.toString()))
+                    }
+            }
+        })
+            .subscribeOn(Schedulers.io())
+            .map { result ->
+                result
+            }
+            .subscribe(
+                { result ->
+                    liveData.value =
+                        State.LinkClass(link = result.dynamicLink.toString())
+                    Log.d("dinara_obs", result.dynamicLink.toString())
+                },
+                { error -> })
+        )
+    }
+
+    fun setData() {
         linker = findViewById(R.id.linker)
-        linker.text = mInvitationUrl.toString()
-        Log.d("authent_sign_create", mInvitationUrl.toString())
         linker.setOnClickListener {
             sendInvitation()
         }
@@ -59,7 +98,6 @@ class MainActivity : AppCompatActivity() {
         if (intent.resolveActivity(packageManager) != null) {
             startActivity(intent)
         }
-
     }
 
     public override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -78,10 +116,18 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        setData()
         auth = FirebaseAuth.getInstance()
         signIn("lollola2019@gmail.com", "Iloveadilbek1")
-        //createAccount("lollola2020@gmail.com", "Iloveadilbek1")
         createLink()
+        liveData.observe(this, Observer { result ->
+            when (result) {
+                is State.LinkClass -> {
+                    Log.d("dinara_link", result.link)
+                    linker.text = result.link
+                }
+            }
+        })
 
         FirebaseDynamicLinks.getInstance()
             .getDynamicLink(intent)
@@ -94,7 +140,8 @@ class MainActivity : AppCompatActivity() {
                 val user = FirebaseAuth.getInstance().currentUser
                 if (user == null &&
                     deepLink != null &&
-                    deepLink.getBooleanQueryParameter("invitedby", false)) {
+                    deepLink.getBooleanQueryParameter("invitedby", false)
+                ) {
                     val referrerUid = deepLink.getQueryParameter("invitedby")
                     createAnonymousAccountWithReferrerInfo(referrerUid)
                 }
@@ -123,8 +170,10 @@ class MainActivity : AppCompatActivity() {
                     Log.d("authent_test", user.toString())
                 } else {
                     Log.w("authent_test_fail", "createUserWithEmail:failure", task.exception)
-                    Toast.makeText(baseContext, "Authentication failed.",
-                        Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        baseContext, "Authentication failed.",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
     }
@@ -138,10 +187,15 @@ class MainActivity : AppCompatActivity() {
 
                 } else {
                     Log.w("authent_sign_test", "signInWithEmail:failure", task.exception)
-                    Toast.makeText(baseContext, "Authentication failed.",
-                        Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        baseContext, "Authentication failed.",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
     }
 
+    sealed class State {
+        data class LinkClass(val link: String) : State()
+    }
 }
